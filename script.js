@@ -43,11 +43,26 @@ CHARACTERS.forEach(c => {
     }
 });
 
+function getStorage(key, def = null) {
+    try {
+        const val = localStorage.getItem(key);
+        return val !== null ? val : def;
+    } catch (e) {
+        return def;
+    }
+}
+
+function setStorage(key, val) {
+    try {
+        localStorage.setItem(key, String(val));
+    } catch (e) {}
+}
+
 let selectedCharacter = CHARACTERS[0]; // Biker by default
-try {
-    const savedId = localStorage.getItem("cyberRunnerCharacter");
-    selectedCharacter = CHARACTERS.find(c => c.id === savedId) || CHARACTERS[0];
-} catch (e) { /* storage unavailable */ }
+const savedCharId = getStorage("cyberRunnerCharacter");
+if (savedCharId) {
+    selectedCharacter = CHARACTERS.find(c => c.id === savedCharId) || CHARACTERS[0];
+}
 
 // Returns a drawable sheet; falls back to the Biker if a character's image is missing.
 function getSheet(char, anim) {
@@ -211,7 +226,7 @@ const game = {
     terminals: [],
     grappleNodes: [],
     rain: [],
-    highScore: Number(localStorage.getItem("cyberRunnerHighScore")) || 0
+    highScore: Number(getStorage("cyberRunnerHighScore", 0)) || 0
 };
 
 const BASE_Y = 550; 
@@ -225,6 +240,8 @@ const player = {
     vy: 0,
     maxHp: 8,
     hp: 8,
+    maxEnergy: 8,
+    energy: 8,
     invincibleTimer: 0,
     grounded: false,
     sliding: false,
@@ -243,11 +260,13 @@ const player = {
         if (!isCheckpoint) {
             this.x = 180;
             this.hp = this.maxHp;
+            this.energy = this.maxEnergy;
             game.lives = 2;
             PHYSICS.autoRunSpeed = 440;
         } else {
             this.x = game.cameraX + 200;
             this.hp = this.maxHp;
+            this.energy = this.maxEnergy;
         }
         this.vx = PHYSICS.autoRunSpeed;
         this.vy = 0;
@@ -274,6 +293,14 @@ const player = {
             const bestPlat = validPlatforms[0];
             this.x = Math.max(this.x, bestPlat.x + 50);
             targetRoofY = bestPlat.y;
+        } else {
+            const allFloorPlatforms = game.platforms.filter(p => !p.isCeiling);
+            if (allFloorPlatforms.length > 0) {
+                allFloorPlatforms.sort((a, b) => Math.abs(a.x - this.x) - Math.abs(b.x - this.x));
+                const nearest = allFloorPlatforms[0];
+                this.x = nearest.x + Math.min(60, nearest.width / 2);
+                targetRoofY = nearest.y;
+            }
         }
         this.y = targetRoofY - this.height;
     },
@@ -308,7 +335,7 @@ const player = {
 /* =========================================================
    INPUT CONTROLLER
    ========================================================= */
-const input = { jump: false, jumpPressed: false, slide: false, grapple: false, focus: false };
+const input = { jump: false, jumpPressed: false, slide: false, grapple: false, focus: false, left: false, right: false };
 
 window.addEventListener("keydown", e => {
     if (["Space", "ArrowUp", "KeyW"].includes(e.code)) {
@@ -320,18 +347,37 @@ window.addEventListener("keydown", e => {
         input.slide = true;
         e.preventDefault();
     }
+    if (["ArrowLeft", "KeyA"].includes(e.code)) {
+        input.left = true;
+    }
+    if (["ArrowRight", "KeyD"].includes(e.code)) {
+        input.right = true;
+    }
     if (e.code === "KeyE") input.grapple = true;
     if (e.code === "ShiftLeft" || e.code === "ShiftRight") input.focus = true;
     if (["KeyP", "Escape"].includes(e.code)) togglePause();
-    if (e.code === "Enter" && game.over && !document.getElementById("gameOverScreen")?.classList.contains("hidden")) startGame();
+    if (e.code === "Enter" && game.over && !document.getElementById("gameOverScreen")?.classList.contains("hidden")) {
+        startGame();
+    } else if ((e.code === "Enter" || e.code === "Space") && !game.started && !game.over) {
+        const startScreen = document.getElementById("startScreen");
+        const charScreen = document.getElementById("characterScreen");
+        if (startScreen && !startScreen.classList.contains("hidden") && (!charScreen || charScreen.classList.contains("hidden"))) {
+            startGame();
+            e.preventDefault();
+        }
+    }
 });
 
 window.addEventListener("keyup", e => {
     if (["Space", "ArrowUp", "KeyW"].includes(e.code)) input.jump = false;
     if (["ArrowDown", "KeyS"].includes(e.code)) input.slide = false;
+    if (["ArrowLeft", "KeyA"].includes(e.code)) input.left = false;
+    if (["ArrowRight", "KeyD"].includes(e.code)) input.right = false;
     if (e.code === "KeyE") input.grapple = false;
     if (e.code === "ShiftLeft" || e.code === "ShiftRight") input.focus = false;
 });
+
+window.addEventListener("pointerdown", initAudio, { once: true });
 
 /* =========================================================
    AUDIO SYNTHESIS
@@ -423,6 +469,12 @@ function sound(type) {
         osc.frequency.exponentialRampToValueAtTime(1320, now + 0.24);
         gain.gain.setValueAtTime(0.09, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    } else if (type === "gravity") {
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(160, now + 0.35);
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
     } else if (type === "crash") {
         osc.type = "sawtooth";
         osc.frequency.setValueAtTime(130, now);
@@ -655,7 +707,15 @@ function extendWorld() {
 function updatePlayer(dt) {
     if (player.invincibleTimer > 0) player.invincibleTimer -= dt;
 
-    game.isFocusing = input.focus;
+    if (input.focus && player.energy > 0) {
+        game.isFocusing = true;
+        player.energy = Math.max(0, player.energy - dt * 2.5);
+    } else {
+        game.isFocusing = false;
+        if (!input.focus && player.energy < player.maxEnergy) {
+            player.energy = Math.min(player.maxEnergy, player.energy + dt * 1.0);
+        }
+    }
     const timeScale = game.isFocusing ? 0.5 : 1.0;
     const scaledDt = dt * timeScale;
 
@@ -703,6 +763,10 @@ function updatePlayer(dt) {
         }
     }
 
+    let speedMod = 1.0;
+    if (input.left) speedMod = 0.75;
+    else if (input.right) speedMod = 1.25;
+
     if (player.isGrappling && player.grappleTarget) {
         const target = player.grappleTarget;
         const angle = Math.atan2(target.y - player.y, target.x - player.x);
@@ -713,13 +777,13 @@ function updatePlayer(dt) {
         if (input.jumpPressed || Math.hypot(target.x - player.x, target.y - player.y) < 45 || player.x > target.x + 30) {
             player.isGrappling = false;
             player.vy = -PHYSICS.jumpVelocity * 0.85;
-            player.vx = PHYSICS.autoRunSpeed + 150;
+            player.vx = (PHYSICS.autoRunSpeed + 150) * speedMod;
             player.lastGrappleNode = target;
             player.grappleCooldown = 0.25;
             player.grappleTarget = null;
         }
     } else {
-        player.vx = PHYSICS.autoRunSpeed;
+        player.vx = PHYSICS.autoRunSpeed * speedMod;
     }
 
     const wasSliding = player.sliding;
@@ -845,7 +909,7 @@ function updatePlayer(dt) {
         }
     }
 
-    if (player.y > H + 400 || player.y < -400) {
+    if (player.y > BASE_Y + 350 || player.y < -150) {
         handleLifeLoss();
         return;
     }
@@ -892,16 +956,21 @@ function updateObstacles(dt) {
             const dist = o.x - player.x;
             if (dist > 0 && dist < 650) {
                 o.state = "shooting";
-                o.shootTimer += dt;
+                o.shootTimer = (o.shootTimer || 0) + dt;
                 
                 if (o.shootTimer > 0.35 && !o.shotFired) {
                     o.shotFired = true;
                     sound("laser_shoot");
                     game.projectiles.push({ x: o.x - 10, y: o.y + 16, vx: -650, width: 32, height: 8 });
-                    setTimeout(() => { o.shotFired = false; o.shootTimer = 0; }, 1000);
+                }
+                if (o.shootTimer > 1.35) {
+                    o.shotFired = false;
+                    o.shootTimer = 0;
                 }
             } else {
                 o.state = "idle";
+                o.shotFired = false;
+                o.shootTimer = 0;
             }
         }
 
@@ -946,6 +1015,7 @@ function checkPickups() {
                 game.pickups.splice(i, 1);
             } else {
                 game.style += 350;
+                player.energy = Math.min(player.maxEnergy, player.energy + 1.5);
                 PHYSICS.autoRunSpeed = Math.min(640, PHYSICS.autoRunSpeed + 10);
                 sound("pickup");
                 createParticles(pickup.x, pickup.y, 20, "#ffe600");
@@ -1031,12 +1101,15 @@ function drawParallax(img, speed) {
     const height = img.height * scale;
     const y = (H - height) / 2;
 
-    // Background moves slower than the camera
-    const offset = (game.cameraX * speed) % width;
+    // Background moves slower than the camera - ensure positive modulo
+    const offset = ((game.cameraX * speed) % width + width) % width;
     const x = -offset;
 
     ctx.drawImage(img, x, y, width, height);
     ctx.drawImage(img, x + width, y, width, height);
+    if (x + width < W) {
+        ctx.drawImage(img, x + width * 2, y, width, height);
+    }
 }
 
 function drawBackground() {
@@ -1054,11 +1127,14 @@ function drawBackground() {
             const height = img.height * scale;
             const y = (H - height) / 2;
 
-            const offset = (game.cameraX * 0.15) % width;
+            const offset = ((game.cameraX * 0.15) % width + width) % width;
             const x = -offset;
 
             ctx.drawImage(img, x, y, width, height);
             ctx.drawImage(img, x + width, y, width, height);
+            if (x + width < W) {
+                ctx.drawImage(img, x + width * 2, y, width, height);
+            }
         } else {
             const sky = ctx.createLinearGradient(0, 0, 0, H);
             sky.addColorStop(0, d.skyTop);
@@ -1426,6 +1502,21 @@ function updateHUD() {
             else cell.classList.remove("hpActive");
         });
     }
+
+    const energyCells = document.querySelectorAll("#energyGauge .gaugeCell");
+    if (energyCells) {
+        const activeEnergy = Math.ceil(player.energy);
+        energyCells.forEach((cell, idx) => {
+            if (idx < activeEnergy) cell.classList.add("energyActive");
+            else cell.classList.remove("energyActive");
+        });
+    }
+
+    const speedEl = document.getElementById("speed");
+    if (speedEl) {
+        const factor = (player.vx / 440) * (game.isFocusing ? 0.5 : 1.0);
+        speedEl.textContent = factor.toFixed(2) + "x";
+    }
     
     const districtEl = document.getElementById("districtLabel");
 
@@ -1477,7 +1568,7 @@ function endGame() {
 
     if (game.score > game.highScore) {
         game.highScore = Math.floor(game.score);
-        localStorage.setItem("cyberRunnerHighScore", game.highScore);
+        setStorage("cyberRunnerHighScore", game.highScore);
     }
 
     const fs = document.getElementById("finalScore");
@@ -1486,6 +1577,7 @@ function endGame() {
     if (fd) fd.textContent = Math.floor(game.distance) + "m";
     const fhs = document.getElementById("finalHighScore");
     if (fhs) fhs.textContent = game.highScore;
+    document.getElementById("hud")?.classList.add("hidden");
     document.getElementById("gameOverScreen")?.classList.remove("hidden");
 }
 
@@ -1516,7 +1608,7 @@ function showStartStage(stage) { // "start" | "menu"
 
 function selectCharacter(id) {
     selectedCharacter = CHARACTERS.find(c => c.id === id) || CHARACTERS[0];
-    try { localStorage.setItem("cyberRunnerCharacter", selectedCharacter.id); } catch (e) {}
+    setStorage("cyberRunnerCharacter", selectedCharacter.id);
     document.querySelectorAll(".charCard").forEach(card => {
         const on = card.dataset.id === selectedCharacter.id;
         card.classList.toggle("selected", on);
@@ -1593,11 +1685,11 @@ function closeCharacterScreen() {
 function backToMainMenu() { // from game-over / pause
     document.getElementById("gameOverScreen")?.classList.add("hidden");
     document.getElementById("pauseScreen")?.classList.add("hidden");
+    document.getElementById("hud")?.classList.add("hidden");
     showStartStage("menu");
     document.getElementById("startScreen")?.classList.remove("hidden");
 }
 
-setTimeout(() => {
 const btnStart = document.getElementById("startButton");
 const btnRestart = document.getElementById("restartButton");
 const btnPause = document.getElementById("pauseButton");
@@ -1613,7 +1705,6 @@ showStartStage("start");
 if (btnRestart) btnRestart.addEventListener("click", startGame);
 if (btnPause) btnPause.addEventListener("click", togglePause);
 if (btnResume) btnResume.addEventListener("click", togglePause);
-}, 50);
 
 resize();
 game.lastRoofY = BASE_Y;
