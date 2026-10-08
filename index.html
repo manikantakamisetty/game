@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CYBER RUNNER // OVERDRIVE</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+<div id="crtOverlay"></div>
+
+<!-- HUD -->
+<div id="hud">
+    <div class="hudLeft">
+        <div class="telemetryBlock">
+            <div class="hudBarRow">
+                <span class="hudLabel">SYSTEM HP</span>
+                <div class="cyberGauge" id="hpGauge">
+                    <div class="gaugeCell hpActive"></div>
+                    <div class="gaugeCell hpActive"></div>
+                    <div class="gaugeCell hpActive"></div>
+                    <div class="gaugeCell hpActive"></div>
+                    <div class="gaugeCell hpActive"></div>
+                    <div class="gaugeCell hpActive"></div>
+                    <div class="gaugeCell hpActive"></div>
+                    <div class="gaugeCell hpActive"></div>
+                </div>
+            </div>
+            <div class="hudBarRow">
+                <span class="hudLabel">OVERDRIVE / FOCUS</span>
+                <div class="cyberGauge" id="energyGauge">
+                    <div class="gaugeCell"></div>
+                    <div class="gaugeCell"></div>
+                    <div class="gaugeCell"></div>
+                    <div class="gaugeCell"></div>
+                    <div class="gaugeCell"></div>
+                    <div class="gaugeCell"></div>
+                    <div class="gaugeCell"></div>
+                    <div class="gaugeCell"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="districtBlock">
+            <span class="hudLabel">SECTOR STATUS</span>
+            <div class="districtTag" id="districtLabel">DISTRICT 1 // LOW-GRID</div>
+        </div>
+    </div>
+
+    <div class="hudCenter">
+        <div class="hudScoreBox">
+            <span class="hudLabel">CYCLE SCORE</span>
+            <strong id="score">000000</strong>
+        </div>
+        <div class="hudDistanceBox">
+            <span class="hudLabel">DISPLACEMENT</span>
+            <strong id="distance">0000 M</strong>
+        </div>
+    </div>
+
+    <div class="hudRight">
+        <div class="hudSpeedWidget">
+            <div class="speedDigits">
+                <strong id="speed">0.00x</strong>
+                <span class="hudLabel">WARP FACTOR</span>
+            </div>
+        </div>
+        <button id="pauseButton" class="cyberBtn mini">HALT</button>
+    </div>
+    <div id="locationAnnouncement">
+    <span>ENTERING LOCATION</span>
+    <h1 id="locationName">NEON DISTRICT</h1>
+</div>
+</div>
+
+<!-- START SCREEN -->
+<div id="startScreen" class="overlay">
+    <div class="panel cyberFrame">
+        <img src="assets/Logo1.png" alt="Logo" class="guiLogo">
+        <div class="neonBadge">GRID PROTOCOL ACTIVE</div>
+        <h1>CYBER<br><span class="glitch">RUNNER</span></h1>
+        <p>GRAVITY INVERSION. GRAPPLE SWINGS. WALL-RUNNING. MASTER THE FLOW STATE.</p>
+        <div id="startStage">
+            <button id="startButton" class="mainCyberButton">START</button>
+        </div>
+        <div id="menuStage" class="menuButtons hidden">
+            <button id="playButton" class="mainCyberButton">PLAY</button>
+            <button id="charactersButton" class="mainCyberButton secondary">CHARACTERS</button>
+            <div class="selectedLine">RUNNER: <span id="selectedCharName">BIKER</span></div>
+        </div>
+        <div class="controls">
+            <span><kbd>A</kbd> / <kbd>D</kbd> RUN</span>
+            <span><kbd>SPACE</kbd> / <kbd>W</kbd> JUMP</span>
+            <span><kbd>S</kbd> SLIDE / WALL-RUN</span>
+            <span><kbd>E</kbd> GRAPPLE SWING</span>
+            <span><kbd>SHIFT</kbd> OVERDRIVE FOCUS</span>
+        </div>
+    </div>
+</div>
+
+<!-- CHARACTER SELECT SCREEN -->
+<div id="characterScreen" class="overlay hidden">
+    <div class="panel cyberFrame wide">
+        <div class="neonBadge">CHOOSE YOUR RUNNER</div>
+        <h2>CHARACTERS</h2>
+        <div id="characterGrid" class="characterGrid"></div>
+        <div class="buttonRow">
+            <button id="charBackButton" class="mainCyberButton secondary">BACK</button>
+            <button id="charPlayButton" class="mainCyberButton">PLAY</button>
+        </div>
+    </div>
+</div>
+
+<!-- PAUSE SCREEN -->
+<div id="pauseScreen" class="overlay hidden">
+    <div class="panel cyberFrame">
+        <div class="neonBadge">SYSTEM FROZEN</div>
+        <h2>RUN PAUSED</h2>
+        <button id="resumeButton" class="mainCyberButton">RECONNECT</button>
+    </div>
+</div>
+
+<!-- GAME OVER SCREEN -->
+<div id="gameOverScreen" class="overlay hidden">
+    <div class="panel cyberFrame">
+        <img src="assets/Logo1.png" alt="Logo" class="guiLogo">
+        <div class="neonBadge alert">CONNECTION SEVERED</div>
+        <h2 class="deathTitle">SYSTEM PURGED</h2>
+        <div class="resultsGrid">
+            <div>
+                <span class="hudLabel">TOTAL SCORE</span>
+                <strong id="finalScore">0</strong>
+            </div>
+            <div>
+                <span class="hudLabel">DISTANCE REACHED</span>
+                <strong id="finalDistance">0m</strong>
+            </div>
+            <div>
+                <span class="hudLabel">RECORD BEACON</span>
+                <strong id="finalHighScore">0</strong>
+            </div>
+        </div>
+        <div class="buttonRow">
+            <button id="restartButton" class="mainCyberButton">REBOOT PROTOCOL</button>
+            <button id="menuButton" class="mainCyberButton secondary">MAIN MENU</button>
+        </div>
+        <p class="restartPrompt">PRESS [ ENTER ] TO RESTART</p>
+    </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
